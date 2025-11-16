@@ -51,27 +51,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
         const int MAX_TOKENS = 50000; // Prevent runaway token generation
 
         while (token_count < MAX_TOKENS) {
-            try {
-                Token tok = lexer.getToken();
+            Token tok = lexer.getToken();
 
-                // Stop at EOF
-                if (tok.type() == TOK_EOF) {
-                    break;
-                }
-
-                token_count++;
-
-                // Exercise token methods to test edge cases
-                // (ASan will catch any memory issues here)
-                tok.type();
-
-            } catch (const Lexer::EndOfFile&) {
-                // Normal EOF
-                break;
-            } catch (const ParseError&) {
-                // Expected for invalid syntax - this is not a crash
+            // Stop at EOF
+            if (tok.type() == TOK_EOF) {
                 break;
             }
+
+            token_count++;
         }
 
     } catch (const std::exception&) {
