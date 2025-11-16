@@ -86,19 +86,45 @@ cd llvm-project/compiler-rt/lib/fuzzer
 ```bash
 cd /path/to/mrustc
 
-# Compile a single fuzzer with AddressSanitizer + UndefinedBehaviorSanitizer
-clang++ -g -O1 -fsanitize=address,fuzzer,undefined \
-    -std=c++14 -Isrc/include -Isrc -Itools/common \
-    fuzz/fuzz_lexer.cpp \
-    src/span.cpp src/rc_string.cpp src/debug.cpp src/ident.cpp \
-    src/parse/lex.cpp src/parse/parseerror.cpp src/parse/token.cpp \
-    src/parse/tokentree.cpp src/parse/tokenstream.cpp \
-    src/ast/ast.cpp src/ast/crate.cpp \
-    -o fuzz_lexer
+# Use the standalone build script (simplest method)
+bash fuzz/standalone_build.sh
 
-# Run the fuzzer
-./fuzz_lexer -max_total_time=60
+# Verify sanitizers are enabled (optional)
+bash fuzz/verify_sanitizers.sh
+
+# Run the fuzzer (coverage mode - finds buffer overflows, use-after-free)
+ASAN_OPTIONS=detect_leaks=0 ./fuzz_lexer -max_total_time=60 fuzz/corpus/lexer
+
+# Run in leak detection mode (finds memory leaks, but crashes on BUG())
+FUZZER_NO_RECOVER=1 ./fuzz_lexer -max_total_time=300 fuzz/corpus/lexer
+
+# Save crash files to specific directory
+mkdir -p fuzz/findings
+ASAN_OPTIONS=detect_leaks=0 ./fuzz_lexer \
+    -artifact_prefix=fuzz/findings/ \
+    -max_total_time=3600 \
+    fuzz/corpus/lexer
 ```
+
+**Fuzzer modes:**
+- **Coverage mode** (default): Skips BUG() assertions, finds buffer overflows/use-after-free
+- **Leak mode** (`FUZZER_NO_RECOVER=1`): Crashes on BUG(), finds real memory leaks
+
+**Fuzzer options:**
+- `FUZZER_NO_RECOVER=1` - Enable leak detection mode (will crash on BUG() assertions)
+- `ASAN_OPTIONS=detect_leaks=0` - Disable leak detection in coverage mode
+- `-artifact_prefix=DIR/` - Save crashes to directory (must end with `/`)
+- `-max_total_time=SEC` - Fuzz for SEC seconds
+- `-workers=N -jobs=N` - Parallel fuzzing with N workers
+
+**Note**: The lexer fuzzer has complex dependencies due to token interpolation support. The standalone build script (`fuzz/standalone_build.sh`) includes all necessary source files and stub implementations.
+
+**Sanitizers**: The fuzzer is built with:
+- **AddressSanitizer (ASan)**: Detects memory errors (buffer overflows, use-after-free, etc.)
+- **UndefinedBehaviorSanitizer (UBSan)**: Detects undefined behavior (integer overflow, null dereference, etc.)
+- **libFuzzer**: Coverage-guided fuzzing engine
+
+To verify sanitizers are active, run: `bash fuzz/verify_sanitizers.sh`
 
 ### OSS-Fuzz Build (Recommended)
 

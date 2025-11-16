@@ -68,3 +68,6 @@
 # Fuzzer binaries
 /fuzz_*
 !/fuzz/
+
+fuzz/corpus/
+fuzz/findings/

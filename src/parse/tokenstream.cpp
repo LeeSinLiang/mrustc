@@ -13,7 +13,10 @@
 const bool DEBUG_PRINT_TOKENS = false;
 //const bool DEBUG_PRINT_TOKENS = true;
 //#define DEBUG_PRINT_TOKENS  debug_enabled("Lexer Tokens")
+#ifndef FUZZER_BUILD
 #define FULL_TRACE
+#endif
+// [FUZZER] For fuzzing, FULL_TRACE is disabled to reduce debug output noise
 
 TokenStream::TokenStream(ParseState ps):
     m_cache_valid(false),
