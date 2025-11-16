@@ -11,21 +11,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+################################################################################
 
-homepage: "https://github.com/thepowersgang/mrustc"
-language: c++
-primary_contact: "security@example.com"  # TODO: Replace with actual maintainer email
-auto_ccs:
-  - "fuzzing@example.com"  # TODO: Replace with actual team emails
+FROM gcr.io/oss-fuzz-base/base-builder
 
-main_repo: "https://github.com/thepowersgang/mrustc.git"
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    make \
+    wget \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-sanitizers:
-  - address
-  - undefined
+# Clone the mrustc repository
+RUN git clone --depth 1 https://github.com/thepowersgang/mrustc.git $SRC/mrustc
 
-architectures:
-  - x86_64
+# Set working directory
+WORKDIR $SRC/mrustc
 
-fuzzing_engines:
-  - libfuzzer
+# Copy build script and fuzzer source
+COPY build.sh fuzz_lexer.cpp fuzzer_stubs.cpp $SRC/
+
+# Copy seed corpus
+COPY fuzz_lexer_seed_corpus.zip $SRC/

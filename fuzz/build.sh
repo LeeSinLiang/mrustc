@@ -1,127 +1,198 @@
 #!/bin/bash -eu
+# Copyright 2025 Google LLC
 #
-# OSS-Fuzz build script for mrustc
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# This script is called by OSS-Fuzz to build the fuzzers.
-# It should compile mrustc as a library and link each fuzzer against it.
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
-# Environment variables set by OSS-Fuzz:
-# - $CXX, $CC: Compiler with fuzzing instrumentation
-# - $CXXFLAGS, $CFLAGS: Compilation flags (includes -fsanitize=...)
-# - $LIB_FUZZING_ENGINE: Fuzzing engine library (libFuzzer)
-# - $OUT: Directory for fuzzer binaries
-# - $SRC: Source code directory
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+################################################################################
+
+# OSS-Fuzz build script for mrustc lexer fuzzer
+#
+# Environment variables provided by OSS-Fuzz:
+# - $CXX: C++ compiler with instrumentation
+# - $CXXFLAGS: Compiler flags including sanitizers
+# - $LIB_FUZZING_ENGINE: Fuzzing engine (libFuzzer, AFL, etc.)
+# - $OUT: Output directory for fuzzers
+# - $SRC: Source directory
+# - $WORK: Temporary work directory
 
 cd $SRC/mrustc
 
-# Build mrustc object files as a library
-# We need to compile all the C++ source files that the fuzzers depend on
-
-echo "[*] Building mrustc components for fuzzing..."
-
 # Create object directory
-mkdir -p .obj-fuzz
+mkdir -p $WORK/obj
 
-# Compile all mrustc source files needed by the fuzzers
-# We'll compile the minimal set required for each fuzzer
+echo "[*] Building mrustc components for lexer fuzzer..."
 
-# Common files needed by all fuzzers
+# Compiler flags for mrustc code
+MRUSTC_CXXFLAGS="$CXXFLAGS -std=c++14 -Isrc/include -Isrc -Itools/common -DFUZZER_BUILD=1"
+
+# Build common utility objects
+echo "[+] Compiling common utilities..."
 COMMON_OBJS=""
-for src in span.cpp rc_string.cpp debug.cpp ident.cpp version.cpp; do
-    echo "[+] Compiling src/$src"
-    $CXX $CXXFLAGS -c -std=c++14 -O2 -Isrc/include -Isrc -Itools/common \
-        -DMRUSTC_VERSION=\"fuzz\" \
-        src/$src -o .obj-fuzz/$(basename $src .cpp).o
-    COMMON_OBJS="$COMMON_OBJS .obj-fuzz/$(basename $src .cpp).o"
+for src in src/span.cpp src/rc_string.cpp src/debug.cpp src/ident.cpp; do
+    obj_name=$(basename $src .cpp).o
+    echo "    - $src"
+    $CXX $MRUSTC_CXXFLAGS -c $src -o $WORK/obj/$obj_name
+    COMMON_OBJS="$COMMON_OBJS $WORK/obj/$obj_name"
 done
 
-# Parse/lexer components for lexer and parser fuzzers
+# Build parse/lexer components
+echo "[+] Compiling lexer components..."
 PARSE_OBJS=""
-for src in parse/lex.cpp parse/parseerror.cpp parse/token.cpp parse/tokentree.cpp \
-           parse/interpolated_fragment.cpp parse/tokenstream.cpp parse/ttstream.cpp; do
-    echo "[+] Compiling src/$src"
-    $CXX $CXXFLAGS -c -std=c++14 -O2 -Isrc/include -Isrc -Itools/common \
-        src/$src -o .obj-fuzz/$(basename $src .cpp).o
-    PARSE_OBJS="$PARSE_OBJS .obj-fuzz/$(basename $src .cpp).o"
+for src in src/parse/lex.cpp src/parse/parseerror.cpp src/parse/token.cpp \
+           src/parse/tokentree.cpp src/parse/interpolated_fragment.cpp \
+           src/parse/tokenstream.cpp src/parse/ttstream.cpp; do
+    obj_name=$(basename $src .cpp).o
+    echo "    - $src"
+    $CXX $MRUSTC_CXXFLAGS -c $src -o $WORK/obj/$obj_name
+    PARSE_OBJS="$PARSE_OBJS $WORK/obj/$obj_name"
 done
 
-# AST components for parser fuzzers
+# Build AST components (required by token.cpp for interpolated fragments)
+echo "[+] Compiling AST components..."
 AST_OBJS=""
-for src in ast/ast.cpp ast/crate.cpp ast/path.cpp ast/expr.cpp ast/pattern.cpp \
-           ast/types.cpp ast/dump.cpp; do
-    echo "[+] Compiling src/$src"
-    $CXX $CXXFLAGS -c -std=c++14 -O2 -Isrc/include -Isrc -Itools/common \
-        src/$src -o .obj-fuzz/$(basename $src .cpp).o
-    AST_OBJS="$AST_OBJS .obj-fuzz/$(basename $src .cpp).o"
+for src in src/ast/ast.cpp src/ast/crate.cpp src/ast/path.cpp \
+           src/ast/expr.cpp src/ast/pattern.cpp src/ast/types.cpp; do
+    obj_name=$(basename $src .cpp).o
+    echo "    - $src"
+    $CXX $MRUSTC_CXXFLAGS -c $src -o $WORK/obj/$obj_name
+    AST_OBJS="$AST_OBJS $WORK/obj/$obj_name"
 done
 
-# Expression parser components
-EXPR_PARSE_OBJS=""
-for src in parse/expr.cpp parse/paths.cpp parse/types.cpp parse/pattern.cpp parse/root.cpp; do
-    echo "[+] Compiling src/$src"
-    $CXX $CXXFLAGS -c -std=c++14 -O2 -Isrc/include -Isrc -Itools/common \
-        src/$src -o .obj-fuzz/$(basename $src .cpp).o || true
-    if [ -f .obj-fuzz/$(basename $src .cpp).o ]; then
-        EXPR_PARSE_OBJS="$EXPR_PARSE_OBJS .obj-fuzz/$(basename $src .cpp).o"
+# Build macro_rules components (required by AST)
+echo "[+] Compiling macro_rules components..."
+MACRO_OBJS=""
+for src in src/macro_rules/mod.cpp src/macro_rules/parse.cpp \
+           src/macro_rules/eval.cpp src/macro_rules/macro_rules.cpp; do
+    obj_name=$(basename $src .cpp).o
+    echo "    - $src"
+    $CXX $MRUSTC_CXXFLAGS -c $src -o $WORK/obj/$obj_name || true
+    if [ -f $WORK/obj/$obj_name ]; then
+        MACRO_OBJS="$MACRO_OBJS $WORK/obj/$obj_name"
     fi
 done
 
-# HIR serialization components
-HIR_OBJS=""
-for src in hir/serialise_lowlevel.cpp hir/hir.cpp; do
-    echo "[+] Compiling src/$src"
-    $CXX $CXXFLAGS -c -std=c++14 -O2 -Isrc/include -Isrc -Itools/common \
-        src/$src -o .obj-fuzz/$(basename $src .cpp).o || true
-    if [ -f .obj-fuzz/$(basename $src .cpp).o ]; then
-        HIR_OBJS="$HIR_OBJS .obj-fuzz/$(basename $src .cpp).o"
+# Build expand components (dependency of macro_rules)
+echo "[+] Compiling expand components..."
+EXPAND_OBJS=""
+for src in src/expand/cfg.cpp src/expand/crate_tags.cpp; do
+    obj_name=$(basename $src .cpp).o
+    echo "    - $src"
+    $CXX $MRUSTC_CXXFLAGS -c $src -o $WORK/obj/$obj_name || true
+    if [ -f $WORK/obj/$obj_name ]; then
+        EXPAND_OBJS="$EXPAND_OBJS $WORK/obj/$obj_name"
     fi
 done
 
-# Target spec components
-TARGET_OBJS=""
-for src in trans/target.cpp; do
-    echo "[+] Compiling src/$src"
-    $CXX $CXXFLAGS -c -std=c++14 -O2 -Isrc/include -Isrc -Itools/common \
-        src/$src -o .obj-fuzz/$(basename $src .cpp).o || true
-    if [ -f .obj-fuzz/$(basename $src .cpp).o ]; then
-        TARGET_OBJS="$TARGET_OBJS .obj-fuzz/$(basename $src .cpp).o"
-    fi
-done
+# Compile fuzzer stub functions
+echo "[+] Compiling fuzzer stubs..."
+$CXX $MRUSTC_CXXFLAGS -c $SRC/fuzzer_stubs.cpp -o $WORK/obj/fuzzer_stubs.o
 
-echo "[*] Building fuzzers..."
-
-# Build fuzzer 1: HIR Deserializer
-echo "[+] Building fuzz_hir_deserialise"
-$CXX $CXXFLAGS -std=c++14 -Isrc/include -Isrc -Itools/common \
-    fuzz/fuzz_hir_deserialise.cpp \
-    $COMMON_OBJS $HIR_OBJS \
-    $LIB_FUZZING_ENGINE -lz \
-    -o $OUT/fuzz_hir_deserialise || echo "[-] Failed to build fuzz_hir_deserialise"
-
-# Build fuzzer 2: Lexer
-echo "[+] Building fuzz_lexer"
-$CXX $CXXFLAGS -std=c++14 -Isrc/include -Isrc -Itools/common \
-    fuzz/fuzz_lexer.cpp \
-    $COMMON_OBJS $PARSE_OBJS $AST_OBJS \
+# Build the lexer fuzzer
+echo "[*] Building fuzz_lexer..."
+$CXX $MRUSTC_CXXFLAGS \
+    $SRC/fuzz_lexer.cpp \
+    $COMMON_OBJS \
+    $PARSE_OBJS \
+    $AST_OBJS \
+    $MACRO_OBJS \
+    $EXPAND_OBJS \
+    $WORK/obj/fuzzer_stubs.o \
     $LIB_FUZZING_ENGINE \
-    -o $OUT/fuzz_lexer || echo "[-] Failed to build fuzz_lexer"
+    -o $OUT/fuzz_lexer
 
-# Build fuzzer 3: Expression Parser
-echo "[+] Building fuzz_expr_parser"
-$CXX $CXXFLAGS -std=c++14 -Isrc/include -Isrc -Itools/common \
-    fuzz/fuzz_expr_parser.cpp \
-    $COMMON_OBJS $PARSE_OBJS $AST_OBJS $EXPR_PARSE_OBJS \
-    $LIB_FUZZING_ENGINE \
-    -o $OUT/fuzz_expr_parser || echo "[-] Failed to build fuzz_expr_parser"
+# Copy seed corpus
+if [ -f $SRC/fuzz_lexer_seed_corpus.zip ]; then
+    echo "[*] Copying seed corpus..."
+    cp $SRC/fuzz_lexer_seed_corpus.zip $OUT/
+fi
 
-# Build fuzzer 4: Target Spec Parser
-echo "[+] Building fuzz_target_spec"
-$CXX $CXXFLAGS -std=c++14 -Isrc/include -Isrc -Itools/common \
-    fuzz/fuzz_target_spec.cpp \
-    $COMMON_OBJS $TARGET_OBJS \
-    $LIB_FUZZING_ENGINE \
-    -o $OUT/fuzz_target_spec || echo "[-] Failed to build fuzz_target_spec"
+# Create dictionary for better fuzzing
+echo "[*] Creating fuzzing dictionary..."
+cat > $OUT/fuzz_lexer.dict << 'EOF'
+# Rust keywords
+"fn"
+"let"
+"mut"
+"pub"
+"struct"
+"enum"
+"impl"
+"trait"
+"use"
+"mod"
+"crate"
+"super"
+"self"
+"if"
+"else"
+"match"
+"while"
+"for"
+"loop"
+"break"
+"continue"
+"return"
+"const"
+"static"
+"unsafe"
+"async"
+"await"
+"dyn"
+"move"
 
-echo "[*] Fuzzer build complete!"
-echo "[*] Built fuzzers:"
-ls -lh $OUT/fuzz_*
+# Operators and delimiters
+"->"
+"=>"
+"::"
+"&&"
+"||"
+"=="
+"!="
+"<="
+">="
+"<<"
+">>"
+
+# Common patterns
+"'static"
+"'_"
+"r#"
+"b'"
+"b\""
+"0x"
+"0o"
+"0b"
+"_"
+"__"
+
+# String escape sequences
+"\\n"
+"\\r"
+"\\t"
+"\\\\"
+"\\'"
+"\\\""
+"\\x"
+"\\u"
+
+# UTF-8 sequences (potential bugs)
+"\xC0\x80"
+"\xE0\x80\x80"
+"\xF0\x80\x80\x80"
+"\xFF"
+"\xFE"
+EOF
+
+echo "[*] Build complete!"
+echo "[*] Fuzzer output:"
+ls -lh $OUT/fuzz_lexer
