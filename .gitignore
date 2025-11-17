@@ -64,3 +64,13 @@
 /bnf/rust.output
 /bnf/test.bin
 /scripts/__pycache__
+
+# Fuzzer binaries
+/fuzz_*
+!/fuzz/
+
+fuzz/corpus/
+fuzz/findings/
+crash-*
+copy_to_ossfuzz.sh
+leak-*

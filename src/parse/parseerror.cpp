@@ -15,33 +15,45 @@ CompileError::Base::~Base() throw()
 CompileError::Generic::Generic(::std::string message):
     m_message(message)
 {
+#ifndef FUZZER_BUILD
     ::std::cout << "Generic(" << message << ")" << ::std::endl;
+#endif
 }
 CompileError::Generic::Generic(const TokenStream& lex, ::std::string message)
 {
+#ifndef FUZZER_BUILD
     ::std::cout << lex.point_span() << ": Generic(" << message << ")" << ::std::endl;
+#endif
 }
 
 CompileError::BugCheck::BugCheck(const TokenStream& lex, ::std::string message):
     m_message(message)
 {
+#ifndef FUZZER_BUILD
     ::std::cout << lex.point_span() << "BugCheck(" << message << ")" << ::std::endl;
+#endif
 }
 CompileError::BugCheck::BugCheck(::std::string message):
     m_message(message)
 {
+#ifndef FUZZER_BUILD
     ::std::cout << "BugCheck(" << message << ")" << ::std::endl;
+#endif
 }
 
 CompileError::Todo::Todo(::std::string message):
     m_message(message)
 {
+#ifndef FUZZER_BUILD
     ::std::cout << "Todo(" << message << ")" << ::std::endl;
+#endif
 }
 CompileError::Todo::Todo(const TokenStream& lex, ::std::string message):
     m_message(message)
 {
+#ifndef FUZZER_BUILD
     ::std::cout << lex.point_span() << ": Todo(" << message << ")" << ::std::endl;
+#endif
 }
 CompileError::Todo::~Todo() throw()
 {
@@ -49,7 +61,9 @@ CompileError::Todo::~Todo() throw()
 
 ParseError::BadChar::BadChar(const TokenStream& lex, char character)
 {
+#ifndef FUZZER_BUILD
     ::std::cout << lex.point_span() << ": BadChar(" << character << ")" << ::std::endl;
+#endif
 }
 ParseError::BadChar::~BadChar() throw()
 {
