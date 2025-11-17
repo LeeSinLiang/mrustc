@@ -40,6 +40,14 @@ mrustc/
 │   ├── standalone_miri/   # MIR interpreter
 │   ├── testrunner/        # Test harness
 │   └── dump_hirfile/      # HIR inspection tool
+├── fuzz/                  # OSS-Fuzz integration (libFuzzer harnesses)
+│   ├── fuzz_hir_deserialise.cpp  # HIR deserializer fuzzer
+│   ├── fuzz_lexer.cpp            # Lexer/tokenizer fuzzer
+│   ├── fuzz_expr_parser.cpp      # Expression parser fuzzer
+│   ├── fuzz_target_spec.cpp      # Target spec parser fuzzer
+│   ├── build.sh                  # OSS-Fuzz build script
+│   ├── corpus/                   # Seed corpus for fuzzers
+│   └── *.md                      # Fuzzing documentation
 ├── docs/                  # User documentation
 ├── Notes/                 # Extensive developer documentation
 ├── samples/               # Test programs
@@ -47,6 +55,7 @@ mrustc/
 ├── lib/                   # Rust support libraries
 ├── Makefile              # Main compiler build
 ├── minicargo.mk          # rustc/cargo bootstrap orchestration
+├── FUZZING_TARGETS.md    # Fuzzing target analysis
 └── README.md             # Project readme
 ```
 
@@ -456,6 +465,30 @@ make -f minicargo.mk LIBS
 ./test_smiri.sh
 ```
 
+#### OSS-Fuzz Integration
+```bash
+# Build fuzzers locally
+cd fuzz
+./build.sh
+
+# Run individual fuzzers
+./fuzz_lexer corpus/lexer/
+./fuzz_hir_deserialise corpus/hir_deserialise/
+./fuzz_expr_parser corpus/expr_parser/
+./fuzz_target_spec corpus/target_spec/
+
+# Verify sanitizers are enabled
+./verify_sanitizers.sh
+```
+
+**Available Fuzzers**:
+1. **fuzz_hir_deserialise** (CRITICAL) - Tests HIR binary deserializer (supply chain attack vector)
+2. **fuzz_lexer** (CRITICAL) - Tests lexer/tokenizer (UTF-8, number parsing, string literals)
+3. **fuzz_expr_parser** (HIGH) - Tests expression parser (stack overflow, deep nesting)
+4. **fuzz_target_spec** (MEDIUM) - Tests TOML target specification parser
+
+See `FUZZING_TARGETS.md` for detailed analysis and `fuzz/README.md` for build instructions.
+
 #### Sample Programs
 ```bash
 # Test samples
@@ -476,6 +509,91 @@ Check `disabled_tests_run-pass.txt` for tests that are known to fail.
 
 ---
 
+## Fuzzing and Security Testing
+
+mrustc includes comprehensive fuzzing infrastructure integrated with OSS-Fuzz for continuous security testing.
+
+### Fuzzing Targets
+
+The project includes four LibFuzzer-based fuzzers targeting different compiler components:
+
+#### 1. HIR Deserializer (CRITICAL Priority)
+- **File**: `fuzz/fuzz_hir_deserialise.cpp`
+- **Target**: `src/hir/deserialise.cpp`
+- **Attack Surface**: Binary format parser for `.hir` files from external crates
+- **Risks**: Buffer overruns, integer overflow, out-of-bounds reads, memory corruption
+- **Why Critical**: Supply chain attack vector - malicious crates can exploit this
+
+#### 2. Lexer/Tokenizer (CRITICAL Priority)
+- **File**: `fuzz/fuzz_lexer.cpp`
+- **Target**: `src/parse/lex.cpp`
+- **Attack Surface**: UTF-8 parsing, number parsing, string literals, escape sequences
+- **Risks**: Integer overflow, buffer overruns, infinite loops, UTF-8 validation bugs
+- **Why Critical**: First stage of compilation, high bug potential
+
+#### 3. Expression Parser (HIGH Priority)
+- **File**: `fuzz/fuzz_expr_parser.cpp`
+- **Target**: `src/parse/expr.cpp`
+- **Attack Surface**: Recursive descent parser for complex nested expressions
+- **Risks**: Stack overflow, infinite recursion, memory exhaustion
+- **Why Important**: 54K lines of complex parsing logic
+
+#### 4. Target Specification Parser (MEDIUM Priority)
+- **File**: `fuzz/fuzz_target_spec.cpp`
+- **Target**: `src/trans/target.cpp`
+- **Attack Surface**: TOML parser for custom target specifications
+- **Risks**: TOML parsing bugs, type confusion, integer overflow
+- **Why Important**: Config injection risks
+
+### Running Fuzzers Locally
+
+```bash
+# Build all fuzzers
+cd fuzz
+./build.sh
+
+# Run a specific fuzzer with corpus
+./fuzz_lexer corpus/lexer/ -max_total_time=60
+
+# Run with AddressSanitizer and UndefinedBehaviorSanitizer
+CXXFLAGS="-fsanitize=address,undefined" ./build.sh
+./fuzz_hir_deserialise corpus/hir_deserialise/
+
+# Verify sanitizers are properly enabled
+./verify_sanitizers.sh
+```
+
+### OSS-Fuzz Integration
+
+mrustc is integrated with Google's OSS-Fuzz for continuous fuzzing:
+- Runs 24/7 with 10,000+ CPU cores
+- Uses AddressSanitizer, UndefinedBehaviorSanitizer, and MemorySanitizer
+- Automatic bug reporting and corpus management
+- See `fuzz/OSS_FUZZ_INTEGRATION.md` for details
+
+### Adding New Fuzzing Targets
+
+When adding a new fuzzer:
+1. Identify the API to fuzz (see `FUZZING_TARGETS.md` for analysis)
+2. Create fuzzer harness in `fuzz/fuzz_<target>.cpp`
+3. Add seed corpus in `fuzz/corpus/<target>/`
+4. Update `fuzz/build.sh` to build the new target
+5. Test locally with sanitizers enabled
+6. Document in `FUZZING_TARGETS.md`
+
+### Expected Bug Classes
+
+| Component | Memory Safety | Integer Overflow | Stack Overflow | DoS | Type Confusion |
+|-----------|---------------|------------------|----------------|-----|----------------|
+| HIR Deserializer | ✅✅✅ | ✅✅✅ | ❌ | ✅✅ | ✅✅✅ |
+| Lexer | ✅✅ | ✅✅✅ | ❌ | ✅ | ❌ |
+| Expr Parser | ✅ | ✅ | ✅✅✅ | ✅✅ | ❌ |
+| Target Parser | ✅ | ✅✅ | ❌ | ✅ | ✅ |
+
+✅✅✅ = Very likely, ✅✅ = Likely, ✅ = Possible, ❌ = Unlikely
+
+---
+
 ## Important Files and Documentation
 
 ### Essential Documentation
@@ -484,6 +602,13 @@ Check `disabled_tests_run-pass.txt` for tests that are known to fail.
 - **README.md** - Project overview, getting started
 - **docs/running.md** - How to use mrustc and minicargo
 - **docs/target.md** - Custom target specification format
+
+#### Fuzzing Documentation
+- **FUZZING_TARGETS.md** - Comprehensive fuzzing target analysis (vulnerability potential, priority)
+- **fuzz/README.md** - OSS-Fuzz integration guide and local build instructions
+- **fuzz/FUZZER_EXPLANATION.md** - Detailed fuzzer implementation explanations
+- **fuzz/DEPLOYMENT_GUIDE.md** - OSS-Fuzz deployment and CI integration
+- **fuzz/OSS_FUZZ_INTEGRATION.md** - Integration with Google's OSS-Fuzz infrastructure
 
 #### Developer Documentation (Notes/)
 - **PhaseOverview.md** - Complete compilation pipeline
@@ -714,6 +839,38 @@ MRUSTC_DEBUG="Relevant:Passes" make -f minicargo.mk LIBS
 ./bin/mrustc minimal_test.rs --dump-mir
 ```
 
+#### 4. Security Testing with Fuzzers
+```bash
+# After modifying parser/lexer/deserializer code
+cd fuzz
+./build.sh
+
+# Run relevant fuzzer for 1 minute
+./fuzz_<target> corpus/<target>/ -max_total_time=60
+
+# Check for crashes in crash-* files
+ls -la crash-*
+
+# Run with sanitizers for thorough testing
+CXXFLAGS="-fsanitize=address,undefined" ./build.sh
+./fuzz_<target> corpus/<target>/
+```
+
+### Working with Fuzzing Infrastructure
+
+When modifying code in fuzzer-targeted components:
+1. **Identify affected fuzzers**: Check `FUZZING_TARGETS.md` to see which fuzzers test your code
+2. **Rebuild fuzzers**: Run `cd fuzz && ./build.sh` after changes
+3. **Run relevant fuzzer**: Test with `./fuzz_<target> corpus/<target>/ -max_total_time=60`
+4. **Add test cases**: If fixing a bug, add crash input to corpus
+5. **Update documentation**: Document any API changes in fuzzer harness
+
+**Important**: Fuzzers may catch bugs that normal testing misses. Always run relevant fuzzers when:
+- Modifying parsing code (`src/parse/`)
+- Changing serialization (`src/hir/deserialise.cpp`)
+- Updating number/string handling
+- Adding new syntax features
+
 ---
 
 ## Git Workflow
@@ -762,6 +919,14 @@ make -f minicargo.mk                   # Build rustc and cargo
 ./bin/mrustc file.rs -L output/libstd  # Compile single file
 ```
 
+### Quick Fuzzing Commands
+```bash
+cd fuzz && ./build.sh                  # Build all fuzzers
+./fuzz_lexer corpus/lexer/ -max_total_time=60  # Run lexer fuzzer
+./fuzz_hir_deserialise corpus/hir_deserialise/  # Run HIR fuzzer
+./verify_sanitizers.sh                 # Check sanitizers enabled
+```
+
 ### Common Debug Tasks
 ```bash
 # See all debug categories
@@ -805,10 +970,14 @@ Key files in `Notes/`:
 ## Version Information
 
 This CLAUDE.md is current as of:
-- **mrustc commit**: aeb58f3 (Merge PR #372)
+- **mrustc commit**: b1f78a7 (Merge PR #2 - OSS-Fuzz integration)
 - **Supported rustc versions**: 1.19.0, 1.29.0, 1.39.0, 1.54.0, 1.74.0
 - **C++ standard**: C++14
 - **Primary platform**: x86-64 Linux GNU
+- **Recent additions**:
+  - OSS-Fuzz integration with 4 fuzzing targets
+  - Comprehensive fuzzing documentation and infrastructure
+  - FUZZING_TARGETS.md analysis document
 
 ---
 
