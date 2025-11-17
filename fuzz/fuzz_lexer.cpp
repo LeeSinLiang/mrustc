@@ -42,6 +42,16 @@
 #include "parse/parseerror.hpp"
 #include "parse/token.hpp"
 
+// Disable leak detection by default for fuzzing
+// (Fuzzers don't clean up memory on exit, which is fine)
+extern "C" const char* __asan_default_options() {
+    return "detect_leaks=0";
+}
+
+extern "C" const char* __lsan_default_options() {
+    return "detect_leaks=0";
+}
+
 // Signal handling to catch BUG() / TODO crashes
 // Can be disabled with FUZZER_NO_RECOVER=1 to find memory leaks
 static thread_local sigjmp_buf jump_buffer;

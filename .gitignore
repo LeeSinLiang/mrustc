@@ -71,3 +71,6 @@
 
 fuzz/corpus/
 fuzz/findings/
+crash-*
+copy_to_ossfuzz.sh
+leak-*

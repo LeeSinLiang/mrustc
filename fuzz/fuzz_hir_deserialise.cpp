@@ -17,6 +17,8 @@
 #include <string>
 #include <cstring>
 #include <stdexcept>
+#include <unistd.h>     // for write, close, unlink
+#include <fcntl.h>      // for mkstemp
 
 // Include mrustc headers
 #include "hir/serialise_lowlevel.hpp"

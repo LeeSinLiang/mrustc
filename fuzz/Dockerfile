@@ -29,8 +29,10 @@ RUN git clone --depth 1 https://github.com/thepowersgang/mrustc.git $SRC/mrustc
 # Set working directory
 WORKDIR $SRC/mrustc
 
-# Copy build script and fuzzer source
-COPY build.sh fuzz_lexer.cpp fuzzer_stubs.cpp $SRC/
+# Create fuzz directory and copy fuzzer sources
+RUN mkdir -p fuzz
+COPY fuzz_lexer.cpp fuzzer_stubs.cpp fuzz/
+COPY fuzz_lexer_seed_corpus.zip fuzz_lexer.options fuzz/
 
-# Copy seed corpus
-COPY fuzz_lexer_seed_corpus.zip $SRC/
+# Copy build script to $SRC (required by OSS-Fuzz)
+COPY build.sh $SRC/

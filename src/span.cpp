@@ -76,7 +76,9 @@ void Span::print_span_message(::std::function<void(::std::ostream&)> tag, ::std:
 }
 void Span::bug(::std::function<void(::std::ostream&)> msg) const
 {
+#ifndef FUZZER_BUILD
     print_span_message([](auto& os){os << "BUG";}, msg);
+#endif
 #ifndef _WIN32
     abort();
 #else
@@ -85,7 +87,9 @@ void Span::bug(::std::function<void(::std::ostream&)> msg) const
 }
 
 void Span::error(ErrorType tag, ::std::function<void(::std::ostream&)> msg) const {
+#ifndef FUZZER_BUILD
     print_span_message([&](auto& os){os << "error:" << tag;}, msg);
+#endif
 #ifndef _WIN32
     abort();
 #else
@@ -93,10 +97,14 @@ void Span::error(ErrorType tag, ::std::function<void(::std::ostream&)> msg) cons
 #endif
 }
 void Span::warning(WarningType tag, ::std::function<void(::std::ostream&)> msg) const {
+#ifndef FUZZER_BUILD
     print_span_message([&](auto& os){os << "warn:" << tag;}, msg);
+#endif
 }
 void Span::note(::std::function<void(::std::ostream&)> msg) const {
+#ifndef FUZZER_BUILD
     print_span_message([](auto& os){os << "note";}, msg);
+#endif
 }
 
 SpanInner::~SpanInner()

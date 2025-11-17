@@ -35,7 +35,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
         // Create a temporary TOML file with the fuzzer input
         // Target spec parser expects a filename
         char temp_filename[] = "/tmp/mrustc_fuzz_target_XXXXXX.toml";
-        int fd = mkstem(temp_filename);
+        int fd = mkstemp(temp_filename);
         if (fd == -1) {
             return 0;
         }
