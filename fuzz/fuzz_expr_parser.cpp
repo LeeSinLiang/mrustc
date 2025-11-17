@@ -23,6 +23,7 @@
 #include "parse/lex.hpp"
 #include "parse/common.hpp"
 #include "parse/parseerror.hpp"
+#include "compile_error.hpp"
 
 // Forward declare Parse_Expr (from parse/common.hpp)
 extern AST::Expr Parse_Expr(TokenStream& lex);
@@ -68,14 +69,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
             // The fuzzer is looking for crashes (ASan/UBSan),
             // not semantic correctness
 
-        } catch (const ParseError&) {
-            // Expected for invalid syntax
-        } catch (const Lexer::EndOfFile&) {
-            // Expected for incomplete input
+        } catch (const CompileError::Base&) {
+            // Expected for invalid syntax (ParseError exceptions inherit from CompileError::Base)
         }
 
     } catch (const std::exception&) {
-        // Catch other exceptions
+        // Catch other exceptions (including std::exception from lexer EOF)
     } catch (...) {
         // Catch all
     }
