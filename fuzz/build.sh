@@ -115,29 +115,33 @@ fi
 # ============================================================================
 echo ""
 echo "[*] Building fuzz_expr_parser..."
-echo "    Note: Expression parser requires extensive compiler infrastructure"
+echo "    Attempting build with comprehensive stubs..."
 
-# Expression parser pulls in too many dependencies:
-# - Needs HIR for crate loading (HIR::CratePtr, HIR_Deserialise)
-# - Needs expand/cfg.cpp for check_cfg()
-# - Needs macro parsing (Parse_MacroRules)
-# - Needs helpers/path
-# - This essentially requires most of the compiler
+# Try building with comprehensive stubs that provide minimal implementations
+# of HIR, CFG, macro parsing, and path helpers
+if $CXX $MRUSTC_CXXFLAGS \
+    fuzz/fuzz_expr_parser.cpp \
+    fuzz/fuzzer_stubs_expr_parser.cpp \
+    src/span.cpp src/rc_string.cpp src/debug.cpp src/ident.cpp \
+    src/parse/lex.cpp src/parse/parseerror.cpp src/parse/token.cpp \
+    src/parse/tokentree.cpp src/parse/tokenstream.cpp src/parse/ttstream.cpp \
+    src/parse/interpolated_fragment.cpp \
+    src/parse/expr.cpp src/parse/pattern.cpp src/parse/types.cpp src/parse/paths.cpp \
+    src/parse/root.cpp \
+    src/ast/ast.cpp src/ast/path.cpp src/ast/types.cpp src/ast/pattern.cpp src/ast/expr.cpp \
+    src/ast/crate.cpp \
+    src/macro_rules/mod.cpp \
+    $LIB_FUZZING_ENGINE \
+    -o "$OUT/fuzz_expr_parser" 2>&1 | tee /tmp/fuzz_expr_build.log; then
 
-echo "[!] fuzz_expr_parser requires HIR deserialization, CFG checking, and macro infrastructure"
-echo "    Skipping for now - requires ~50+ source files"
-echo "    The lexer fuzzer already covers most tokenization and parsing bugs"
-FAILED_FUZZERS+=("fuzz_expr_parser (requires extensive infrastructure)")
-
-# Uncomment and add many more source files to attempt build:
-# if $CXX $MRUSTC_CXXFLAGS \
-#     fuzz/fuzz_expr_parser.cpp \
-#     ... (needs 50+ more source files) \
-#     $LIB_FUZZING_ENGINE \
-#     -o "$OUT/fuzz_expr_parser"; then
-#     echo "[✓] Successfully built fuzz_expr_parser"
-#     BUILT_FUZZERS+=("fuzz_expr_parser")
-# fi
+    echo "[✓] Successfully built fuzz_expr_parser"
+    BUILT_FUZZERS+=("fuzz_expr_parser")
+else
+    echo "[✗] Failed to build fuzz_expr_parser"
+    FAILED_FUZZERS+=("fuzz_expr_parser")
+    echo "    Error details:"
+    tail -30 /tmp/fuzz_expr_build.log
+fi
 
 # ============================================================================
 # 4. fuzz_target_spec - Target Specification Parser fuzzer (MEDIUM)
